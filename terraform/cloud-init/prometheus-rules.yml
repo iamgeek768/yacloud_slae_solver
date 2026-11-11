@@ -1,0 +1,19 @@
+# Производные метрики считаются на главной ВМ и уходят в Managed Service for Prometheus
+# готовыми рядами: дашборд читает их простыми селекторами, без rate() и агрегаций
+# на стороне сервиса (такие запросы Managed Prometheus выполняет медленнее и с ошибками 503/504).
+groups:
+  - name: slae
+    interval: 15s
+    rules:
+      - record: slae:nodes_up:sum
+        expr: sum(up{job="slae-nodes"})
+      - record: slae:nodes:count
+        expr: count(up{job="slae-nodes"})
+      - record: slae:node_cpu_busy:percent
+        expr: 100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job="slae-nodes",mode="idle"}[1m])))
+      - record: slae:node_memory_used:percent
+        expr: 100 * (1 - node_memory_MemAvailable_bytes{job="slae-nodes"} / node_memory_MemTotal_bytes{job="slae-nodes"})
+      - record: slae:node_memory_used:bytes
+        expr: node_memory_MemTotal_bytes{job="slae-nodes"} - node_memory_MemAvailable_bytes{job="slae-nodes"}
+      - record: slae:node_network_receive:bytes_per_second
+        expr: sum by (instance) (rate(node_network_receive_bytes_total{job="slae-nodes",device!="lo"}[1m]))

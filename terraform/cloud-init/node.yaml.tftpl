@@ -1,0 +1,123 @@
+#cloud-config
+# Окружение узла кластера: MPI/OpenMP, беспарольный SSH между узлами,
+# скачивание данных из Object Storage при запуске, метрики и логи в Monium.
+
+users:
+  - name: yc-user
+    groups: sudo
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    ssh_authorized_keys:
+      - ${admin_public_key}
+  - name: mpi
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${cluster_public_key}
+
+package_update: true
+packages:
+  - build-essential
+  - openmpi-bin
+  - libopenmpi-dev
+  - jq
+  - curl
+
+# Файлы кладутся в /etc/slae и раскладываются по местам в runcmd:
+# write_files выполняется раньше, чем создаются пользователи.
+write_files:
+  - path: /etc/slae/env
+    permissions: "0644"
+    encoding: b64
+    content: ${base64encode(env_file)}
+  - path: /etc/slae/id_ed25519
+    permissions: "0600"
+    encoding: b64
+    content: ${base64encode(cluster_private_key)}
+  - path: /etc/slae/ssh_config
+    permissions: "0644"
+    content: |
+      Host slae-* 10.10.*
+        StrictHostKeyChecking no
+        UserKnownHostsFile /dev/null
+        LogLevel ERROR
+  - path: /etc/slae/hosts
+    permissions: "0644"
+    encoding: b64
+    content: ${base64encode(etc_hosts)}
+  - path: /etc/slae/hostfile
+    permissions: "0644"
+    encoding: b64
+    content: ${base64encode(hostfile)}
+  - path: /etc/slae/fetch_data.sh
+    permissions: "0755"
+    encoding: b64
+    content: ${base64encode(fetch_data_sh)}
+  - path: /etc/slae/run_solver.sh
+    permissions: "0755"
+    encoding: b64
+    content: ${base64encode(run_solver_sh)}
+  - path: /etc/slae/install_logging.sh
+    permissions: "0755"
+    encoding: b64
+    content: ${base64encode(install_logging_sh)}
+  - path: /etc/slae/otelcol.yaml
+    permissions: "0644"
+    encoding: b64
+    content: ${base64encode(otelcol_config)}
+  - path: /usr/local/bin/slae-iam-token
+    permissions: "0755"
+    encoding: b64
+    content: ${base64encode(iam_token_sh)}
+  - path: /etc/systemd/system/slae-iam-token.service
+    permissions: "0644"
+    encoding: b64
+    content: ${base64encode(iam_token_service)}
+  - path: /etc/systemd/system/slae-iam-token.timer
+    permissions: "0644"
+    encoding: b64
+    content: ${base64encode(iam_token_timer)}
+%{ if ssh_alt_port > 0 ~}
+  # Дополнительный порт SSH на главной ВМ (переменная ssh_alt_port).
+  - path: /etc/ssh/sshd_config.d/slae-ports.conf
+    permissions: "0644"
+    content: |
+      Port 22
+      Port ${ssh_alt_port}
+%{ endif ~}
+  - path: /etc/slae/install_monitoring.sh
+    permissions: "0755"
+    encoding: b64
+    content: ${base64encode(install_monitoring_sh)}
+  - path: /etc/slae/prometheus.yml
+    permissions: "0644"
+    encoding: b64
+    content: ${base64encode(prometheus_config)}
+  - path: /etc/slae/prometheus-rules.yml
+    permissions: "0644"
+    encoding: b64
+    content: ${base64encode(prometheus_rules)}
+  - path: /etc/systemd/system/slae-fetch.service
+    permissions: "0644"
+    encoding: b64
+    content: ${base64encode(fetch_service)}
+
+runcmd:
+  - install -d -o mpi -g mpi -m 0755 /opt/slae /opt/slae/bin /opt/slae/src /opt/slae/data /opt/slae/out /var/log/slae
+  - install -d -m 0755 /var/lib/slae
+  - install -d -o mpi -g mpi -m 0700 /home/mpi/.ssh
+  - install -o mpi -g mpi -m 0600 /etc/slae/id_ed25519 /home/mpi/.ssh/id_ed25519
+  - install -o mpi -g mpi -m 0600 /etc/slae/ssh_config /home/mpi/.ssh/config
+  - install -o mpi -g mpi -m 0644 /etc/slae/hostfile /opt/slae/hostfile
+  - install -m 0755 /etc/slae/fetch_data.sh /etc/slae/run_solver.sh /opt/slae/bin/
+  - cat /etc/slae/hosts >> /etc/hosts
+  - systemctl daemon-reload
+  - systemctl enable slae-fetch.service
+  - systemctl enable --now slae-iam-token.timer
+  - systemctl start slae-iam-token.service
+%{ if ssh_alt_port > 0 ~}
+  - systemctl restart ssh
+%{ endif ~}
+  # Мониторинг и отправка логов не должны мешать готовности узла к расчётам.
+  - /etc/slae/install_monitoring.sh || echo "monitoring setup failed"
+  - /etc/slae/install_logging.sh || echo "logging setup failed"
+  - systemctl start slae-fetch.service && touch /var/lib/slae/ready

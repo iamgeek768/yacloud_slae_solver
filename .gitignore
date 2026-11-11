@@ -1,0 +1,15 @@
+terraform/.terraform/
+*.tfstate
+*.tfstate.*
+terraform/terraform.tfvars
+crash.log
+*.env
+solver/build/
+data/*
+results/
+*.bin
+
+monitoring/.env
+.known_hosts
+terraform/tfplan
+

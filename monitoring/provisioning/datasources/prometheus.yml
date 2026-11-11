@@ -1,0 +1,19 @@
+# Managed Service for Prometheus (Monium): чтение через Prometheus HTTP API
+# с IAM-токеном в заголовке Authorization.
+apiVersion: 1
+datasources:
+  - name: Yandex Managed Prometheus
+    uid: yc-prometheus
+    type: prometheus
+    access: proxy
+    url: https://monitoring.api.cloud.yandex.net/prometheus/workspaces/${PROMETHEUS_WORKSPACE_ID}
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: GET
+      # Managed Prometheus отвечает на часть запросов дольше стандартных 30 секунд.
+      timeout: 120
+      timeInterval: 15s
+      httpHeaderName1: Authorization
+    secureJsonData:
+      httpHeaderValue1: Bearer ${YC_IAM_TOKEN}

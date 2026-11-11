@@ -1,0 +1,8 @@
+[Unit]
+Description=SLAE: refresh IAM token for Prometheus and OpenTelemetry Collector
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/slae-iam-token

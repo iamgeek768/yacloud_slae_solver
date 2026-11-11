@@ -1,0 +1,73 @@
+# OpenTelemetry Collector: отправка логов узла в Monium Logs по OTLP/gRPC.
+# Авторизация — IAM-токеном сервисного аккаунта ВМ (роль monium.logs.writer);
+# токен обновляет таймер slae-iam-token, коллектор перечитывает файл при изменении.
+# В Monium: project = ${project}, cluster = slae, service = slae-solver | slae-node.
+extensions:
+  bearertokenauth/monium:
+    filename: /var/lib/slae/iam_token
+  file_storage:
+    directory: /var/lib/otelcol/file_storage
+
+receivers:
+  # Лог расчётов: строки решателя со всех рангов собираются на главной ВМ.
+  filelog/solver:
+    include: [/var/log/slae/solver.log]
+    start_at: beginning
+    storage: file_storage
+    operators: &json_lines
+      # Строки решателя — JSON; прочие строки (сообщения mpirun) уходят как есть.
+      - type: json_parser
+        on_error: send_quiet
+        timestamp:
+          parse_from: attributes.ts
+          layout_type: strptime
+          layout: "%Y-%m-%dT%H:%M:%S.%LZ"
+        severity:
+          parse_from: attributes.level
+  # Лог узла: скачивание данных и сборка решателя.
+  filelog/node:
+    include: [/var/log/slae/node.log]
+    start_at: beginning
+    storage: file_storage
+    operators: *json_lines
+
+processors:
+  resource/solver:
+    attributes:
+      - { key: service.name, value: slae-solver, action: upsert }
+  resource/node:
+    attributes:
+      - { key: service.name, value: slae-node, action: upsert }
+  resource/common:
+    attributes:
+      - { key: cluster, value: slae, action: upsert }
+      - { key: host.name, value: ${node_name}, action: upsert }
+  batch:
+    timeout: 5s
+
+exporters:
+  otlp/monium:
+    # Эндпоинт только для IPv4: у ВМ нет IPv6-адресов.
+    endpoint: ipv4.ingest.monium.yandex.cloud:443
+    compression: zstd
+    headers:
+      x-monium-project: ${project}
+    auth:
+      authenticator: bearertokenauth/monium
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+service:
+  extensions: [bearertokenauth/monium, file_storage]
+  pipelines:
+    logs/solver:
+      receivers: [filelog/solver]
+      processors: [resource/solver, resource/common, batch]
+      exporters: [otlp/monium]
+    logs/node:
+      receivers: [filelog/node]
+      processors: [resource/node, resource/common, batch]
+      exporters: [otlp/monium]

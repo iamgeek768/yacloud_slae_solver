@@ -1,0 +1,26 @@
+# Скопируйте в terraform.tfvars и подставьте свои значения.
+cloud_id    = "b1gxxxxxxxxxxxxxxxxx"
+folder_id   = "b1gxxxxxxxxxxxxxxxxx"
+bucket_name = "slae-xxxxxxxx"
+
+# Адреса, с которых пускать по SSH (ваш внешний IP: curl -s https://ifconfig.me).
+# При VPN с раздельной маршрутизацией адрес для SSH может отличаться от того, что показывают
+# сайты; фактический адрес виден на ВМ в переменной SSH_CLIENT.
+admin_cidrs = ["203.0.113.10/32"]
+
+# По одному узлу в зоне — под квоту 2 vCPU на зону. Если квота позволяет,
+# можно собрать кластер в одной зоне: ["ru-central1-a", "ru-central1-a", "ru-central1-a", "ru-central1-a"]
+node_zones = ["ru-central1-a", "ru-central1-d", "ru-central1-e"]
+
+# Воркспейс Managed Service for Prometheus: monium.yandex.cloud -> Prometheus -> «Создать воркспейс».
+# Пусто — node_exporter и Prometheus на узлы не ставятся.
+prometheus_workspace_id = "monxxxxxxxxxxxxxxxxx"
+
+# Отправка логов вычислений в Monium Logs (Unified Agent на узлах).
+# enable_logging = true
+
+# node_cores     = 2
+# node_memory_gb = 4
+# node_disk_gb   = 20
+# node_disk_type = "network-hdd"
+# preemptible    = true

@@ -1,0 +1,33 @@
+# Prometheus на главной ВМ: опрашивает node_exporter всех узлов и пересылает
+# метрики в Managed Service for Prometheus (Monium) через Remote Write.
+global:
+  scrape_interval: 15s
+  external_labels:
+    cluster: slae
+
+rule_files:
+  - /etc/prometheus/slae_rules.yml
+
+scrape_configs:
+  - job_name: slae-nodes
+    static_configs:
+      - targets: ${targets}
+    relabel_configs:
+      # instance = имя узла без порта: slae-master, slae-worker-1, ...
+      - source_labels: [__address__]
+        regex: "([^:]+):\\d+"
+        target_label: instance
+        replacement: "$1"
+
+remote_write:
+  - url: https://monitoring.api.cloud.yandex.net/prometheus/workspaces/${workspace_id}/api/v1/write
+    # IAM-токен сервисного аккаунта ВМ; файл обновляет таймер slae-iam-token,
+    # Prometheus перечитывает его при каждом запросе.
+    authorization:
+      type: Bearer
+      credentials_file: /var/lib/slae/iam_token
+    queue_config:
+      max_samples_per_send: 2000
+      retry_on_http_429: true
+    metadata_config:
+      send: false

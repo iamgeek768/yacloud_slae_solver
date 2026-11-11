@@ -1,0 +1,13 @@
+[Unit]
+Description=SLAE: download solver sources and matrix from Object Storage, build the solver
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=mpi
+ExecStart=/opt/slae/bin/fetch_data.sh
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target
